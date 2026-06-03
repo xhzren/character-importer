@@ -43,7 +43,7 @@ async function saveIndexToStore() {
         const names = {};
         for (const c of characters) {
             const name = (c.data?.name ?? c.name ?? '').trim();
-            if (name) names[name] = c.avatar ?? '';
+            if (name) names[name.toLowerCase()] = c.avatar ?? '';
         }
         await store.setJson({
             namespace: STORE_NAMESPACE,
@@ -224,17 +224,28 @@ async function onImportClick() {
                     continue;
                 }
 
-                // --- Step 2: duplicate check — same logic as original handleImportDuplicate ---
+                // --- Step 2: duplicate check — use persistent index (O(1)) if available ---
                 const peekedLower = peeked.name.trim().toLowerCase();
-                const existingChars = characters.filter(c => {
-                    const cName = (c.data?.name ?? c.name ?? '').trim().toLowerCase();
-                    return cName === peekedLower;
-                });
+                let target = null;
+                const storedIndex = await loadIndexFromStore();
+                if (storedIndex?.names) {
+                    const avatar = storedIndex.names[peekedLower];
+                    if (avatar) {
+                        target = { name: peeked.name.trim(), avatar };
+                    }
+                }
+                // Fallback: scan in-memory characters array
+                if (!target) {
+                    const found = characters.find(c => {
+                        const cName = (c.data?.name ?? c.name ?? '').trim().toLowerCase();
+                        return cName === peekedLower;
+                    });
+                    if (found) target = { name: found.data?.name ?? found.name, avatar: found.avatar };
+                }
 
-                const isOverwrite = existingChars.length > 0;
+                const isOverwrite = !!target;
 
                 if (isOverwrite) {
-                    const target = existingChars[0];
                     appendLog(`${label} 检测到同名角色 "${target.name}"，执行覆盖更新`);
                     // Delete world book + old character (keep chats), then import as new.
                     // This avoids relying on `preserved_name` which some backends (TauriTave) don't support.
@@ -280,13 +291,6 @@ async function onImportClick() {
 
                 const avatarFileName = `${result.file_name}.png`;
 
-                // --- Step 4: world book import — always, since some backends (e.g. TauriTave) don't extract it ---
-                try {
-                    await importCharacterWorldBook(avatarFileName);
-                } catch (err) {
-                    console.error('[CharImporter] world book import error:', err);
-                }
-
                 ok++;
                 const action = isOverwrite ? '覆盖' : '新建';
                 appendLog(`${label} 完成 (${action}): ${avatarFileName}`);
@@ -298,8 +302,8 @@ async function onImportClick() {
 
         appendLog(`[导入] 结束 — ${ok}/${total} 成功`);
         await getCharacters();
-        // 暂时禁用刷新，方便查看日志
-        // if (ok > 0) location.reload();
+        await saveIndexToStore();
+        if (ok > 0) location.reload();
     });
 
     document.body.appendChild(input);
@@ -605,6 +609,7 @@ async function scanDuplicatesAndCleanup() {
 
     appendLog(`[清理重复] 完成 — 已删除 ${deletedCount} 张卡片`);
     await getCharacters();
+    await saveIndexToStore();
 }
 
 // ---------------------------------------------------------------------------
@@ -638,4 +643,107 @@ jQuery(async () => {
     $('#char_importer_init').on('click', onInitClick);
     $('#char_importer_import').on('click', onImportClick);
     $('#char_importer_clean_duplicates').on('click', scanDuplicatesAndCleanup);
+
+    // --- Intercept normal character imports to keep index in sync ---
+    // Only add NEW names; never overwrite existing index entries.
+    if (typeof window !== 'undefined' && window.fetch) {
+        const _origFetch = window.fetch;
+        window.fetch = async function (url, options) {
+            if (typeof url === 'string' && url === '/api/characters/import') {
+                const oldIndex = await loadIndexFromStore();
+                const result = await _origFetch.call(window, url, options);
+                if (result.ok) {
+                    setTimeout(async () => {
+                        try {
+                            await getCharacters();
+                            const store = getStore();
+                            if (!store) return;
+                            const oldNames = oldIndex?.names ?? {};
+                            const names = {};
+                            for (const c of characters) {
+                                const name = (c.data?.name ?? c.name ?? '').trim();
+                                if (!name) continue;
+                                const key = name.toLowerCase();
+                                names[key] = oldNames[key] ?? (c.avatar ?? '');
+                            }
+                            await store.setJson({
+                                namespace: STORE_NAMESPACE,
+                                key: STORE_KEY,
+                                value: {
+                                    builtAt: new Date().toISOString(),
+                                    total: Object.keys(names).length,
+                                    names,
+                                },
+                            });
+                        } catch {}
+                    }, 1500);
+                }
+                return result;
+            }
+            return _origFetch.call(window, url, options);
+        };
+    }
+
+    // --- Keep index in sync with character operations ---
+    if (eventSource && event_types) {
+        // Character deleted: remove from index
+        if (event_types.CHARACTER_DELETED) {
+            eventSource.on(event_types.CHARACTER_DELETED, async ({ character }) => {
+                const store = getStore();
+                if (!store) return;
+                try {
+                    const name = (character?.data?.name ?? character?.name ?? '').trim().toLowerCase();
+                    if (!name) return;
+                    const stored = await loadIndexFromStore();
+                    if (stored?.names?.[name]) {
+                        delete stored.names[name];
+                        stored.total = Object.keys(stored.names).length;
+                        await store.setJson({ namespace: STORE_NAMESPACE, key: STORE_KEY, value: stored });
+                    }
+                } catch {}
+            });
+        }
+
+        // Character renamed: update key in index
+        if (event_types.CHARACTER_RENAMED) {
+            eventSource.on(event_types.CHARACTER_RENAMED, async (_oldAvatar, newAvatar) => {
+                const store = getStore();
+                if (!store) return;
+                try {
+                    const stored = await loadIndexFromStore();
+                    if (!stored?.names) return;
+                    // Find old name by avatar
+                    const oldLower = Object.keys(stored.names).find(k => stored.names[k] === _oldAvatar);
+                    if (!oldLower) return;
+                    // Get new name from in-memory characters
+                    const entry = characters.find(c => c.avatar === newAvatar);
+                    const newName = (entry?.data?.name ?? entry?.name ?? '').trim().toLowerCase();
+                    if (!newName) return;
+                    delete stored.names[oldLower];
+                    stored.names[newName] = newAvatar;
+                    await store.setJson({ namespace: STORE_NAMESPACE, key: STORE_KEY, value: stored });
+                } catch {}
+            });
+        }
+
+        // Character duplicated: add to index
+        if (event_types.CHARACTER_DUPLICATED) {
+            eventSource.on(event_types.CHARACTER_DUPLICATED, async ({ newAvatar }) => {
+                const store = getStore();
+                if (!store) return;
+                try {
+                    const entry = characters.find(c => c.avatar === newAvatar);
+                    const name = (entry?.data?.name ?? entry?.name ?? '').trim().toLowerCase();
+                    if (!name) return;
+                    const stored = await loadIndexFromStore();
+                    if (!stored) return;
+                    stored.names = stored.names || {};
+                    stored.names[name] = newAvatar;
+                    stored.total = Object.keys(stored.names).length;
+                    stored.builtAt = new Date().toISOString();
+                    await store.setJson({ namespace: STORE_NAMESPACE, key: STORE_KEY, value: stored });
+                } catch {}
+            });
+        }
+    }
 });
