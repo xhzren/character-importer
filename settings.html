@@ -1,28 +1,23 @@
 <div id="character_importer_settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b data-i18n="ci.panel_title">Character Importer</b>
+            <b>角色卡覆盖导入</b>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <div class="inline-drawer-content">
+        <div class="inline-drawer-content" style="display:none">
             <div class="ci-actions">
                 <button id="char_importer_init" class="menu_button menu_button_icon" type="button">
                     <i class="fa-solid fa-rotate"></i>
-                    <span data-i18n="ci.init">初始化</span>
+                    <span>初始化索引</span>
                 </button>
                 <button id="char_importer_import" class="menu_button menu_button_icon" type="button">
                     <i class="fa-solid fa-file-import"></i>
-                    <span data-i18n="ci.import">导入</span>
+                    <span>导入</span>
                 </button>
                 <button id="char_importer_clean_duplicates" class="menu_button menu_button_icon" type="button">
                     <i class="fa-solid fa-broom"></i>
-                    <span data-i18n="ci.clean_duplicates">清理重复</span>
+                    <span>清理重复</span>
                 </button>
-            </div>
-
-            <div id="char_importer_drop_zone" class="ci-drop-zone">
-                <i class="fa-solid fa-cloud-arrow-up ci-drop-icon"></i>
-                <span data-i18n="ci.drop_hint">拖放角色卡文件到此处 (.png / .json / .webp / .charx / .yaml)</span>
             </div>
 
             <textarea id="char_importer_log" class="ci-log" readonly rows="12" placeholder="等待操作..."></textarea>

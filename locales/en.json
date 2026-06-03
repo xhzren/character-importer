@@ -1,7 +1,0 @@
-{
-    "ci.panel_title": "Character Importer",
-    "ci.init": "Init",
-    "ci.import": "Import",
-    "ci.clean_duplicates": "Clean Duplicates",
-    "ci.drop_hint": "Drop character card files here (.png / .json / .webp / .charx / .yaml)"
-}

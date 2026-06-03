@@ -6,36 +6,8 @@
 
 #character_importer_settings .ci-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-#character_importer_settings .ci-drop-zone {
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
     gap: 8px;
-    padding: 28px 16px;
-    border: 2px dashed var(--SmartThemeBorderColor);
-    border-radius: 10px;
-    background-color: var(--black20a);
-    color: var(--SmartThemeBodyColor);
-    opacity: 0.75;
-    transition: border-color 0.2s, background-color 0.2s, opacity 0.2s;
-    cursor: pointer;
-    user-select: none;
-}
-
-#character_importer_settings .ci-drop-zone.ci-drop-active {
-    border-color: var(--SmartThemeActiveBorderColor, #4a9eff);
-    background-color: var(--black30a);
-    opacity: 1;
-}
-
-#character_importer_settings .ci-drop-icon {
-    font-size: 2rem;
-    opacity: 0.6;
 }
 
 #character_importer_settings .ci-log {
