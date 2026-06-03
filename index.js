@@ -291,6 +291,39 @@ async function onImportClick() {
 
                 const avatarFileName = `${result.file_name}.png`;
 
+                // --- Step 4: for overwrites, re-associate old preserved chats ---
+                if (isOverwrite) {
+                    try {
+                        const searchRes = await fetch('/api/chats/search', {
+                            method: 'POST',
+                            headers: getRequestHeaders(),
+                            body: JSON.stringify({ avatar_url: avatarFileName }),
+                        });
+                        if (searchRes.ok) {
+                            const chatList = await searchRes.json();
+                            if (Array.isArray(chatList) && chatList.length > 0) {
+                                chatList.sort((a, b) => (b.last_mes || 0) - (a.last_mes || 0));
+                                const latestChat = chatList[0];
+                                if (latestChat.file_name) {
+                                    const mergeRes = await fetch('/api/characters/merge-attributes', {
+                                        method: 'POST',
+                                        headers: getRequestHeaders(),
+                                        body: JSON.stringify({
+                                            avatar: avatarFileName,
+                                            chat: latestChat.file_name,
+                                        }),
+                                    });
+                                    if (mergeRes.ok) {
+                                        appendLog(`${label} 已绑定原对话: ${latestChat.file_name}`);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[CharImporter] chat re-associate error:', err);
+                    }
+                }
+
                 ok++;
                 const action = isOverwrite ? '覆盖' : '新建';
                 appendLog(`${label} 完成 (${action}): ${avatarFileName}`);
