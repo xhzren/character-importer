@@ -9,6 +9,56 @@ import {
 } from '../../../../script.js';
 
 const MODULE_NAME = 'third-party/character-importer';
+const STORE_NAMESPACE = 'character-importer';
+const STORE_KEY = 'character_index';
+
+// ---------------------------------------------------------------------------
+// Extension Store (TauriTave persistent storage)
+// ---------------------------------------------------------------------------
+
+function getStore() {
+    try {
+        const host = window.__TAURITAVERN__;
+        return host?.api?.extension?.store ?? null;
+    } catch {
+        return null;
+    }
+}
+
+async function loadIndexFromStore() {
+    const store = getStore();
+    if (!store) return null;
+    try {
+        const result = await store.tryGetJson({ namespace: STORE_NAMESPACE, key: STORE_KEY });
+        return result.found ? result.value : null;
+    } catch {
+        return null;
+    }
+}
+
+async function saveIndexToStore() {
+    const store = getStore();
+    if (!store) return;
+    try {
+        const names = {};
+        for (const c of characters) {
+            const name = (c.data?.name ?? c.name ?? '').trim();
+            if (name) names[name] = c.avatar ?? '';
+        }
+        await store.setJson({
+            namespace: STORE_NAMESPACE,
+            key: STORE_KEY,
+            value: {
+                builtAt: new Date().toISOString(),
+                total: characters.length,
+                names,
+            },
+        });
+    } catch (err) {
+        console.error('[CharImporter] store save error:', err);
+    }
+}
+
 
 // ---------------------------------------------------------------------------
 // Logging
@@ -30,6 +80,9 @@ async function onInitClick() {
     try {
         await getCharacters();
         appendLog(`[初始化索引] 完成 — 共 ${characters.length} 张角色卡`);
+        await saveIndexToStore();
+        const store = getStore();
+        if (store) appendLog('[初始化索引] 已持久化索引到本地存储');
     } catch (err) {
         appendLog(`[初始化索引] 加载失败: ${err.message ?? err}`);
     }
@@ -178,14 +231,24 @@ async function onImportClick() {
                     return cName === peekedLower;
                 });
 
-                let preserveFileName = '';
+                const isOverwrite = existingChars.length > 0;
 
-                if (existingChars.length > 0) {
-                    // Overwrite strategy (default, same as original)
+                if (isOverwrite) {
                     const target = existingChars[0];
-                    preserveFileName = target.avatar.replace(/\.png$/i, '');
                     appendLog(`${label} 检测到同名角色 "${target.name}"，执行覆盖更新`);
+                    // Delete world book + old character (keep chats), then import as new.
+                    // This avoids relying on `preserved_name` which some backends (TauriTave) don't support.
                     await deleteCharacterWorldBook(target);
+                    const deleteRes = await fetch('/api/characters/delete', {
+                        method: 'POST',
+                        headers: getRequestHeaders(),
+                        body: JSON.stringify({ avatar_url: target.avatar, delete_chats: false }),
+                    });
+                    if (!deleteRes.ok) {
+                        appendLog(`${label} 删除旧角色失败，跳过`);
+                        continue;
+                    }
+                    appendLog(`${label} 已移除旧角色，保留对话`);
                 } else {
                     appendLog(`${label} 新角色，直接导入`);
                 }
@@ -196,7 +259,6 @@ async function onImportClick() {
                 formData.append('avatar', file);
                 formData.append('file_type', ext);
                 formData.append('user_name', name1);
-                if (preserveFileName) formData.append('preserved_name', preserveFileName);
 
                 const importRes = await fetch('/api/characters/import', {
                     method: 'POST',
@@ -218,17 +280,15 @@ async function onImportClick() {
 
                 const avatarFileName = `${result.file_name}.png`;
 
-                // --- Step 4: world book import (overwrite) — same as original importCharacter ---
-                if (preserveFileName) {
-                    try {
-                        await importCharacterWorldBook(avatarFileName);
-                    } catch (err) {
-                        console.error('[CharImporter] world book import error:', err);
-                    }
+                // --- Step 4: world book import — always, since some backends (e.g. TauriTave) don't extract it ---
+                try {
+                    await importCharacterWorldBook(avatarFileName);
+                } catch (err) {
+                    console.error('[CharImporter] world book import error:', err);
                 }
 
                 ok++;
-                const action = preserveFileName ? '覆盖' : '新建';
+                const action = isOverwrite ? '覆盖' : '新建';
                 appendLog(`${label} 完成 (${action}): ${avatarFileName}`);
             } catch (err) {
                 appendLog(`${label} 异常: ${err.message ?? err}`);
@@ -555,16 +615,22 @@ jQuery(async () => {
     const html = await renderExtensionTemplateAsync(MODULE_NAME, 'settings');
     $('#extensions_settings2').append(html);
 
-    // Show current index status (waits for APP_READY so characters are loaded)
-    const showIndexStatus = () => {
-        if (characters && characters.length > 0) {
-            appendLog(`当前索引共 ${characters.length} 张角色卡`);
-        } else {
-            appendLog('尚未初始化索引，请点击「初始化索引」加载角色列表');
+    // Show current index status — try TauriTave store first, fall back to in-memory
+    const showIndexStatus = async () => {
+        const stored = await loadIndexFromStore();
+        if (stored?.total > 0) {
+            appendLog(`已加载持久化索引 — 共 ${stored.total} 张角色卡 (${new Date(stored.builtAt).toLocaleString()})`);
+            return;
         }
+        // Fallback: check in-memory characters (upstream ST)
+        if (characters && characters.length > 0) {
+            appendLog(`当前角色库共 ${characters.length} 张角色卡`);
+            return;
+        }
+        appendLog('尚未初始化索引，请点击「初始化索引」加载角色列表');
     };
     if (eventSource && event_types?.APP_READY) {
-        eventSource.once(event_types.APP_READY, showIndexStatus);
+        eventSource.once(event_types.APP_READY, () => showIndexStatus());
     } else {
         showIndexStatus();
     }
