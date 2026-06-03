@@ -5,7 +5,7 @@
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "羽吻奈",
+    "author": "",
     "version": "1.0.0",
     "description": "角色卡批量覆盖导入与重复清理"
 }
