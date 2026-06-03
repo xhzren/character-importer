@@ -1,0 +1,7 @@
+{
+    "ci.panel_title": "角色卡导入",
+    "ci.init": "初始化",
+    "ci.import": "导入",
+    "ci.clean_duplicates": "清理重复",
+    "ci.drop_hint": "拖放角色卡文件到此处 (.png / .json / .webp / .charx / .yaml)"
+}

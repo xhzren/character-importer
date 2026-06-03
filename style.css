@@ -1,0 +1,66 @@
+#character_importer_settings .inline-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#character_importer_settings .ci-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#character_importer_settings .ci-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 28px 16px;
+    border: 2px dashed var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background-color: var(--black20a);
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.75;
+    transition: border-color 0.2s, background-color 0.2s, opacity 0.2s;
+    cursor: pointer;
+    user-select: none;
+}
+
+#character_importer_settings .ci-drop-zone.ci-drop-active {
+    border-color: var(--SmartThemeActiveBorderColor, #4a9eff);
+    background-color: var(--black30a);
+    opacity: 1;
+}
+
+#character_importer_settings .ci-drop-icon {
+    font-size: 2rem;
+    opacity: 0.6;
+}
+
+#character_importer_settings .ci-log {
+    width: 100%;
+    min-height: 180px;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background-color: var(--black20a);
+    color: var(--SmartThemeBodyColor);
+    font-family: var(--mainFontFamily, monospace);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+    white-space: pre-wrap;
+    word-break: break-all;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+}
+
+#character_importer_settings .ci-log:focus {
+    outline: none;
+}
+
+#character_importer_settings .ci-log::placeholder {
+    color: var(--SmartThemeEmColor);
+    opacity: 0.55;
+}

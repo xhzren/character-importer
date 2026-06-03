@@ -1,0 +1,17 @@
+{
+    "display_name": "Character Importer",
+    "loading_order": 23,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "i18n": {
+        "en": "locales/en.json",
+        "zh-cn": "locales/zh-cn.json",
+        "zh-tw": "locales/zh-tw.json"
+    },
+    "author": "TauriTavern",
+    "version": "1.0.0",
+    "description": "Batch character card import, update, and deduplication tools.",
+    "homePage": "https://github.com/Darkatse/TauriTavern"
+}
