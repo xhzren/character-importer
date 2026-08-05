@@ -12,6 +12,13 @@ const MODULE_NAME = 'third-party/character-importer';
 const STORE_NAMESPACE = 'character-importer';
 const STORE_KEY = 'character_index';
 
+// Set while a batch import loop is running. During that window we suppress the
+// background index refresh in the fetch interceptor: its getCharacters() call
+// triggers a full shallow-index rebuild in TauriTavern, which races with the
+// delete requests of later files in the batch ("Failed to read character
+// metadata ... No such file or directory").
+let isBatchImporting = false;
+
 // ---------------------------------------------------------------------------
 // Extension Store (TauriTave persistent storage)
 // ---------------------------------------------------------------------------
@@ -205,6 +212,7 @@ async function onImportClick() {
         input.remove();
         if (files.length === 0) return;
 
+        isBatchImporting = true;
         appendLog(`[导入] 已选择 ${files.length} 个文件`);
         const total = files.length;
         let ok = 0;
@@ -247,8 +255,10 @@ async function onImportClick() {
 
                 if (isOverwrite) {
                     appendLog(`${label} 检测到同名角色 "${target.name}"，执行覆盖更新`);
-                    // Delete world book + old character (keep chats), then import as new.
-                    // This avoids relying on `preserved_name` which some backends (TauriTave) don't support.
+                    // Overwrite flow: 1) delete old world book + character (keep chats),
+                    // 2) import new card, 3) rebind the old chats below.
+                    // Not using `preserved_name` on purpose: an atomic replace keeps the old
+                    // world book binding, but the requirement is to replace the world book too.
                     await deleteCharacterWorldBook(target);
                     const deleteRes = await fetch('/api/characters/delete', {
                         method: 'POST',
@@ -334,6 +344,7 @@ async function onImportClick() {
         }
 
         appendLog(`[导入] 结束 — ${ok}/${total} 成功`);
+        isBatchImporting = false;
         await getCharacters();
         await saveIndexToStore();
         if (ok > 0) location.reload();
@@ -687,6 +698,7 @@ jQuery(async () => {
                 const result = await _origFetch.call(window, url, options);
                 if (result.ok) {
                     setTimeout(async () => {
+                        if (isBatchImporting) return;
                         try {
                             await getCharacters();
                             const store = getStore();
